@@ -1,5 +1,5 @@
 # R-ESM
-ESM for RNA
+Evolutionary Scale Modeling (ESM) for RNA
 
 Built based on [ESM](https://github.com/facebookresearch/esm) (A Transformer protein language models from Facebook AI Research).
 
