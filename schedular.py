@@ -3,7 +3,8 @@ from torch._six import inf
 import math
 
 class Scheduler:
-    def __init__(self, optim, loss_scaler, lr_scheduler) -> None:
+    def __init__(self, model, optim, loss_scaler, lr_scheduler) -> None:
+        self.model = model
         self.optim = optim
         self.scaler = loss_scaler
         self.scheduler = lr_scheduler
@@ -18,15 +19,14 @@ class Scheduler:
         loss = self.loss_scale(loss)
         loss.backward(create_graph=create_graph)
 
-    def step_and_lr_schedule(self, epoch, clip_grad=None, parameters=None, update_grad=True):
+    def step_and_lr_schedule(self, epoch, clip_grad=None, update_grad=True):
         if update_grad:
             if clip_grad is not None:
-                assert parameters is not None
                 self.scaler.unscale_(self.optim)  # unscale the gradients of optimizer's assigned params in-place
-                norm = torch.nn.utils.clip_grad_norm_(parameters, clip_grad)
+                norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), clip_grad)
             else:
                 self.scaler.unscale_(self.optim)
-                norm = get_grad_norm_(parameters)
+                norm = get_grad_norm_(self.model.parameters())
             self.scaler.step(self.optim)
             self.scaler.update()
         else:

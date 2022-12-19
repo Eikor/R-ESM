@@ -12,15 +12,16 @@ def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, lo
     print_freq = 20
     accum_iter = 1 if args.accum_iter < 1 else args.accum_iter
 
-    for batch_idx, (labels, strs, toks, masktoks, masks) in enumerate(data_loader):
+    for batch_idx, (labels, strs, toks, masktoks, masks) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         if torch.cuda.is_available() and not args.nogpu:
             toks = toks.to(device="cuda", non_blocking=True)
             masktoks = masktoks.to(device="cuda", non_blocking=True)
+            masks = masks.to(device="cuda", non_blocking=True)
 
         with torch.cuda.amp.autocast():
             out = model(masktoks, repr_layers=args.repr_layers, return_contacts=args.return_contacts)
             logits = out["logits"].permute(0, 2, 1) # B*C*D
-            loss = criterion(logits, toks)
+            loss = criterion(logits, toks, masks)
 
         loss_value = loss.item()
 
@@ -33,21 +34,21 @@ def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, lo
         if (batch_idx + 1) % accum_iter == 0:
             training_scheduler.zero_grad()
             training_scheduler.loss_scale_and_backward(loss)
-            training_scheduler.step_and_lr_schedule(data_iter_step / len(data_loader) + epoch, )
+            training_scheduler.step_and_lr_schedule(batch_idx / len(data_loader) + epoch)
 
         torch.cuda.synchronize()
 
         metric_logger.update(loss=loss_value)
 
-        lr = optimizer.param_groups[0]["lr"]
+        lr = training_scheduler.optim.param_groups[0]["lr"]
         metric_logger.update(lr=lr)
 
-        loss_value_reduce = misc.all_reduce_mean(loss_value)
-        if log_writer is not None and (data_iter_step + 1) % accum_iter == 0:
+        loss_value_reduce = dist_misc.all_reduce_mean(loss_value)
+        if log_writer is not None and (batch_idx + 1) % accum_iter == 0:
             """ We use epoch_1000x as the x-axis in tensorboard.
             This calibrates different curves when batch size changes.
             """
-            epoch_1000x = int((data_iter_step / len(data_loader) + epoch) * 1000)
+            epoch_1000x = int((batch_idx / len(data_loader) + epoch) * 1000)
             log_writer.add_scalar('train_loss', loss_value_reduce, epoch_1000x)
             log_writer.add_scalar('lr', lr, epoch_1000x)
 

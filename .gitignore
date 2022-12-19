@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+.vscode
+
+output/*
+output/checkpoint-0.pth
+output/log.txt
