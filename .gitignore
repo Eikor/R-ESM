@@ -130,6 +130,6 @@ dmypy.json
 
 .vscode
 
-output/*
+output/
 output/checkpoint-0.pth
 output/log.txt
