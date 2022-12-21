@@ -14,12 +14,12 @@ def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, lo
 
     for batch_idx, (labels, strs, toks, masktoks, masks) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         if torch.cuda.is_available() and not args.nogpu:
-            toks = toks.to(device="cuda", non_blocking=True)
+            toks = toks.to(device="cuda", non_blocking=True) 
             masktoks = masktoks.to(device="cuda", non_blocking=True)
             masks = masks.to(device="cuda", non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            out = model(masktoks, repr_layers=args.repr_layers, return_contacts=args.return_contacts)
+            out = model(masktoks)
             logits = out["logits"].permute(0, 2, 1) # B*C*D
             loss = criterion(logits, toks, masks)
 
