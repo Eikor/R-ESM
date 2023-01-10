@@ -79,7 +79,7 @@ def create_parser():
     parser.add_argument(
         "--accum_iter",
         type=int,
-        default=1,
+        default=32,
         help="accum grad to mimic large batch size",
     )
 

@@ -8,7 +8,7 @@ import os
 import json
 
 from esm import FastaBatchedDataset, pretrained
-from data import MaskedBatchConverter, DistributedBatchSampler
+from data import MaskedBatchConverter, DistributedBatchSampler, Alphabet_RNA
 from args import create_parser
 from criterion import MaskedPredictionLoss
 from schedular import Scheduler, LinearScheduler
@@ -49,6 +49,16 @@ def main(args):
     ### change to dist sampler ###
     batch_index = dataset.get_batch_indices(args.toks_per_batch, extra_toks_per_seq=1)
 
+    # ####
+    # counter = []
+    # RNAseg_toks = set('ATCGU')
+    # ambigues = []
+    # for item in dataset:
+    #     counter.append(len(item[1]))
+    #     if not set(item[1]) - RNAseg_toks:
+    #         ambigues.append(item[0]) 
+    # ####
+    
     num_tasks = dist_misc.get_world_size()
     global_rank = dist_misc.get_rank()
     sampler_train = DistributedBatchSampler(
@@ -56,6 +66,7 @@ def main(args):
     )
     print("Sampler_train = %s" % str(sampler_train))
 
+    alphabet = Alphabet_RNA.from_architecture('RNA')
     data_loader_train = torch.utils.data.DataLoader(
         dataset, collate_fn=MaskedBatchConverter(alphabet, args.truncation_seq_length), batch_sampler=sampler_train
     )
