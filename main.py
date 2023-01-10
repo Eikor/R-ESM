@@ -6,9 +6,9 @@ import time
 import datetime
 import os
 import json
-
+os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3,4,5"
 from esm import FastaBatchedDataset, pretrained
-from data import MaskedBatchConverter, DistributedBatchSampler, Alphabet_RNA
+from data import MaskedBatchConverter, DistributedBatchSampler, Alphabet_RNA, RNADataset
 from args import create_parser
 from criterion import MaskedPredictionLoss
 from schedular import Scheduler, LinearScheduler
@@ -45,7 +45,7 @@ def main(args):
         print("Transferred model to GPU")
 
     # prepare dataset
-    dataset = FastaBatchedDataset.from_file(args.fasta_file)
+    dataset = RNADataset.from_file(args.fasta_file)
     ### change to dist sampler ###
     batch_index = dataset.get_batch_indices(args.toks_per_batch, extra_toks_per_seq=1)
 
@@ -66,10 +66,19 @@ def main(args):
     )
     print("Sampler_train = %s" % str(sampler_train))
 
-    alphabet = Alphabet_RNA.from_architecture('RNA')
+    alphabet = Alphabet_RNA.RNA(coden_size=args.coden_size)
     data_loader_train = torch.utils.data.DataLoader(
-        dataset, collate_fn=MaskedBatchConverter(alphabet, args.truncation_seq_length), batch_sampler=sampler_train
+        dataset, collate_fn=MaskedBatchConverter(alphabet, args.truncation_seq_length), num_workers=4, batch_sampler=sampler_train
     )
+    ####
+    # counter1 = 0
+    # counter2 = 0
+    # for item in dataset:
+    #     if 'N' in item[1]:
+    #         counter1 += 1
+    #         counter2 += item[1].count('N')
+
+    ####
 
     print(f"Read {args.fasta_file} with {len(dataset)} sequences")
 

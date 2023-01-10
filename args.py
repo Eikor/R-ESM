@@ -23,6 +23,12 @@ def create_parser():
         help="output directory for extracted representations",
     )
 
+    parser.add_argument(
+        "--coden_size",
+        type=int,
+        default=2,
+    )
+
     parser.add_argument("--toks_per_batch", type=int, default=4096, help="maximum batch size")
     parser.add_argument(
         "--repr_layers",

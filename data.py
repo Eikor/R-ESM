@@ -4,44 +4,54 @@ import torch
 from torch.utils.data import DistributedSampler
 import math
 from typing import TypeVar, Optional, Iterator
-from esm.data import Alphabet
-import torch
+from esm.data import Alphabet, FastaBatchedDataset
 import itertools
-import os
+import random 
 from typing import Sequence, Tuple, List, Union
-import torch
-from pathlib import Path
+from tqdm import tqdm
 
 
-import torch.distributed as dist
+
 
 __all__ = ["DistributedSampler", ]
 
 T_co = TypeVar('T_co', covariant=True)
 
-RNAseg_toks = {
-    'toks': ['N', 'M', 'T', 'U', 'A', 'V', 'K', 'H', 'Y', 'R', 'D', 'B', 'G', 'S', 'W', 'C']
+RNAseq_toks = {
+    'toks': ['T', 'A', 'G', 'C'],
+    'amb_toks': ['M', 'R', 'W', 'S', 'Y', 'K', 'V', 'H', 'D', 'B'],
+    'pair_toks': ['AC', 'AG', 'AT', 'CG', 'CT', 'GT', 'ACG', 'ACT', 'AGT', 'CGT']
 }
 
 class Alphabet_RNA(Alphabet):
     def __init__(
         self,
-        standard_toks: Sequence[str],
         prepend_toks: Sequence[str] = ("<null_0>", "<pad>", "<eos>", "<unk>"),
         append_toks: Sequence[str] = ("<cls>", "<mask>", "<sep>"),
         prepend_bos: bool = True,
         append_eos: bool = False,
         use_msa: bool = False,
+        coden_size: int = 2,
     ):
-        self.standard_toks = list(standard_toks)
+        self.standard_toks = RNAseq_toks['toks']
         self.prepend_toks = list(prepend_toks)
         self.append_toks = list(append_toks)
         self.prepend_bos = prepend_bos
         self.append_eos = append_eos
         self.use_msa = use_msa
         
+        ####
+        self.coden_size = coden_size
+        self.amb_toks = RNAseq_toks['amb_toks']
+        self.amb_to_pair = {
+                amb_tok: pair_tok \
+                for amb_tok, pair_tok in zip(RNAseq_toks['amb_toks'], RNAseq_toks['pair_toks'])
+                }
+        ####
+
         self.all_toks = list(self.prepend_toks)
-        self.all_toks.extend(self.standard_toks)
+        for tok in itertools.product(self.standard_toks, repeat=self.coden_size):
+            self.all_toks.append(''.join(tok))
         for i in range((8 - (len(self.all_toks) % 8)) % 8):
             self.all_toks.append(f"<null_{i  + 1}>")
         self.all_toks.extend(self.append_toks)
@@ -54,7 +64,8 @@ class Alphabet_RNA(Alphabet):
         self.mask_idx = self.get_idx("<mask>")
         self.eos_idx = self.get_idx("<eos>")
         self.all_special_tokens = ['<eos>', '<unk>', '<pad>', '<cls>', '<mask>']
-        self.unique_no_split_tokens = self.all_toks
+        self.unique_no_split_tokens = self.prepend_toks + self.standard_toks + \
+                self.append_toks + self.amb_toks
 
     def __len__(self):
         return len(self.all_toks)
@@ -69,20 +80,21 @@ class Alphabet_RNA(Alphabet):
         return self.tok_to_idx.copy()
 
     @classmethod
-    def from_architecture(cls, name: str) -> "Alphabet":
-        if name in ("RNA"):
-            standard_toks = RNAseg_toks["toks"]
-            prepend_toks = ("<cls>", "<pad>", "<eos>", "<unk>")
-            append_toks = ("<mask>",)
-            prepend_bos = True
-            append_eos = True
-            use_msa = False
-        else:
-            raise ValueError("Unknown architecture selected")
-        return cls(standard_toks, prepend_toks, append_toks, prepend_bos, append_eos, use_msa)
+    def RNA(cls, coden_size=2) -> "Alphabet":
+        prepend_toks = ("<cls>", "<pad>", "<eos>", "<unk>")
+        append_toks = ("<mask>",)
+        prepend_bos = True
+        append_eos = True
+        use_msa = False
+        return cls(prepend_toks, append_toks, prepend_bos, append_eos, use_msa, coden_size=coden_size)
 
     def _tokenize(self, text) -> str:
-        return text.split()
+        if text in self.amb_toks:
+            pair = self.amb_to_pair[text]
+            tok = pair[int(random.random()*len(pair))]
+        else:
+            tok = text.split()
+        return tok
 
     def tokenize(self, text, **kwargs) -> List[str]:
         """
@@ -143,8 +155,6 @@ class Alphabet_RNA(Alphabet):
                 itertools.chain.from_iterable(
                     (
                         self._tokenize(token)
-                        if token not in self.unique_no_split_tokens
-                        else [token]
                         for token in tokenized_text
                     )
                 )
@@ -152,11 +162,89 @@ class Alphabet_RNA(Alphabet):
 
         no_split_token = self.unique_no_split_tokens
         tokenized_text = split_on_tokens(no_split_token, text)
+        padding = self.coden_size -1
+        if padding > 0:
+            tokenized_text.extend(tokenized_text[-1:] * padding)
+        tokenized_text = [''.join(tokenized_text[i:i+self.coden_size]) for i in range(len(tokenized_text) - padding)]
         return tokenized_text
 
     def encode(self, text):
         return [self.tok_to_idx[tok] for tok in self.tokenize(text)]
 
+
+class RNADataset(FastaBatchedDataset):
+    def __init__(self, sequence_labels, sequence_strs):
+        self.sequence_labels = list(sequence_labels)
+        self.sequence_strs = list(sequence_strs)
+
+    @classmethod
+    def from_file(cls, fasta_file):
+        sequence_labels, sequence_strs = [], []
+        cur_seq_label = None
+        buf = []
+
+        def _flush_current_seq():
+            nonlocal cur_seq_label, buf
+            if cur_seq_label is None:
+                return
+            sequence_strs.append("".join(buf))
+            if 'N' in sequence_strs[-1]:
+                sequence_strs.pop()
+            else:
+                sequence_labels.append(cur_seq_label)
+            cur_seq_label = None
+            buf = []
+
+        with open(fasta_file, "r") as infile:
+            for line_idx, line in tqdm(enumerate(infile)):
+                if line.startswith(">"):  # label line
+                    _flush_current_seq()
+                    line = line[1:].strip()
+                    if len(line) > 0:
+                        cur_seq_label = line
+                    else:
+                        cur_seq_label = f"seqnum{line_idx:09d}"
+                else:  # sequence line
+                    buf.append(line.strip())
+
+        _flush_current_seq()
+
+        assert len(set(sequence_labels)) == len(
+            sequence_labels
+        ), "Found duplicate sequence labels"
+
+        return cls(sequence_labels, sequence_strs)
+
+    def __len__(self):
+        return len(self.sequence_labels)
+
+    def __getitem__(self, idx):
+        return self.sequence_labels[idx], self.sequence_strs[idx]
+
+    def get_batch_indices(self, toks_per_batch, extra_toks_per_seq=0):
+        sizes = [(len(s), i) for i, s in enumerate(self.sequence_strs)]
+        sizes.sort()
+        batches = []
+        buf = []
+        max_len = 0
+
+        def _flush_current_buf():
+            nonlocal max_len, buf
+            if len(buf) == 0:
+                return
+            batches.append(buf)
+            buf = []
+            max_len = 0
+
+        for sz, i in sizes:
+            sz += extra_toks_per_seq
+            if max(sz, max_len) * (len(buf) + 1) > toks_per_batch:
+                _flush_current_buf()
+            max_len = max(max_len, sz)
+            buf.append(i)
+
+        _flush_current_buf()
+        return batches
 
 class MaskedBatchConverter(object):
     """Callable to convert an unprocessed (labels + strings) batch to a
@@ -190,7 +278,7 @@ class MaskedBatchConverter(object):
         masks = torch.zeros_like(tokens)
         masked_tokens = tokens.clone()
         random_tokens = torch.randint_like(masked_tokens, 4, 20) # Ribonucleic acid 'N' to 'C' encode as 4 to 19 
-        corrupt_prob = torch.randn_like(masked_tokens, dtype=float)
+        corrupt_prob = torch.randn_like(masked_tokens, dtype=torch.float)
         corrupt_prob = (corrupt_prob - 0.85) / 0.15
         corrupt_prob.clamp_(min=0)
 
