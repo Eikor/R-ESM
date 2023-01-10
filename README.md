@@ -10,7 +10,9 @@ pip install fair-esm
 ./exp.sh 
 ```
 ## Features
-Training script for original protein ESM
+Training script for ESM
+RNA codens as tokens
+![avatar](asset/coden.png)
 
 ## TODO
-build RNA dataset
+-[x] build RNA dataset
