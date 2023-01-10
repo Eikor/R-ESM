@@ -10,9 +10,11 @@ pip install fair-esm
 ./exp.sh 
 ```
 ## Features
-Training script for ESM
-RNA codens as tokens
-<img src=asset/coden.png width=100 height=200 />
+Training script for ESM.
+
+RNA codens as tokens.
+
+<img src=asset/coden.png width=300 height=400 />
 
 ## TODO
 - [x] build RNA dataset
