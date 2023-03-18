@@ -14,7 +14,8 @@ from criterion import MaskedPredictionLoss
 from schedular import Scheduler, LinearScheduler
 import dist_misc
 from train import train_one_epoch
-
+import numpy as np
+import random
 
 def main(args):
     # distribute init
@@ -28,7 +29,8 @@ def main(args):
     # fix the seed for reproducibility
     seed = args.seed + dist_misc.get_rank()
     torch.manual_seed(seed)
-
+    np.random.seed(seed)
+    random.seed(seed)
 
     # prepare model
     model, alphabet = pretrained.load_model_and_alphabet(args.model_location)

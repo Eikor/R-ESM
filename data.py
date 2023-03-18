@@ -9,7 +9,7 @@ import itertools
 import random 
 from typing import Sequence, Tuple, List, Union
 from tqdm import tqdm
-
+import torch.nn.functional as F
 
 
 
@@ -21,6 +21,10 @@ RNAseq_toks = {
     'toks': ['T', 'A', 'G', 'C'],
     'amb_toks': ['M', 'R', 'W', 'S', 'Y', 'K', 'V', 'H', 'D', 'B'],
     'pair_toks': ['AC', 'AG', 'AT', 'CG', 'CT', 'GT', 'ACG', 'ACT', 'AGT', 'CGT']
+}
+
+Rand_toks = {
+
 }
 
 class Alphabet_RNA(Alphabet):
@@ -66,6 +70,7 @@ class Alphabet_RNA(Alphabet):
         self.all_special_tokens = ['<eos>', '<unk>', '<pad>', '<cls>', '<mask>']
         self.unique_no_split_tokens = self.prepend_toks + self.standard_toks + \
                 self.append_toks + self.amb_toks
+        self.kernel = torch.tensor([1]).expand(1, 1, coden_size)
 
     def __len__(self):
         return len(self.all_toks)
@@ -259,10 +264,8 @@ class MaskedBatchConverter(object):
         # RoBERTa uses an eos token, while ESM-1 does not.
         batch_size = len(raw_batch)
         batch_labels, seq_str_list = zip(*raw_batch)
-        seq_encoded_list = [self.alphabet.encode(seq_str) for seq_str in seq_str_list]
-        if self.truncation_seq_length:
-            seq_encoded_list = [seq_str[:self.truncation_seq_length] for seq_str in seq_encoded_list]
-        max_len = max(len(seq_encoded) for seq_encoded in seq_encoded_list)
+        
+        max_len = max(len(seq_str) for seq_str in seq_str_list)
         tokens = torch.empty(
             (
                 batch_size,
@@ -277,36 +280,58 @@ class MaskedBatchConverter(object):
         ### masking ###
         masks = torch.zeros_like(tokens)
         masked_tokens = tokens.clone()
-        random_tokens = torch.randint_like(masked_tokens, 4, 20) # Ribonucleic acid 'N' to 'C' encode as 4 to 19 
-        corrupt_prob = torch.randn_like(masked_tokens, dtype=torch.float)
+        corrupt_prob = torch.rand_like(masked_tokens, dtype=torch.float)
         corrupt_prob = (corrupt_prob - 0.85) / 0.15
         corrupt_prob.clamp_(min=0)
+        mask_prob = corrupt_prob > 0.2 # 80% change to mask
+        all_masks = corrupt_prob > 0
 
-        for i, (label, seq_str, seq_encoded) in enumerate(
-            zip(batch_labels, seq_str_list, seq_encoded_list)
+        for shift in range(self.alphabet.coden_size - 1):
+            mask_prob[:, :-shift-1] += mask_prob.roll(-shift-1)[:, :-shift-1]
+            all_masks[:, :-shift-1] += all_masks.roll(-shift-1)[:, :-shift-1]
+        
+        #rectify mask prob
+        corrupt_prob[:, :int(self.alphabet.prepend_bos)] = 0
+        mask_prob[:, :int(self.alphabet.prepend_bos)] = False
+
+        for i, (label, seq_str) in enumerate(
+            zip(batch_labels, seq_str_list)
         ):
             labels.append(label)
             strs.append(seq_str)
+            seq_encoded = self.alphabet.encode(seq_str)
+            if self.truncation_seq_length:
+                seq_encoded = seq_encoded[:self.truncation_seq_length]
+            
             start_idx = int(self.alphabet.prepend_bos)
             end_idx = len(seq_encoded) + int(self.alphabet.prepend_bos)
             
-            if self.alphabet.prepend_bos:
-                tokens[i, 0] = self.alphabet.cls_idx
-                masked_tokens[i, 0] = self.alphabet.cls_idx
             seq = torch.tensor(seq_encoded, dtype=torch.int64)
             tokens[i, start_idx : end_idx] = seq
 
             # 10% change random acid
-            masked_tokens[i, start_idx : end_idx] = (tokens \
-                + (random_tokens-tokens) * (corrupt_prob>0.1))[i, start_idx : end_idx]
-                
+            corrupt_str = seq_str
+            for random_i in torch.where(corrupt_prob[i, start_idx : end_idx]>0.1)[0]:
+                corrupt_str = corrupt_str[:random_i]+\
+                    random.choice(RNAseq_toks['toks'])+corrupt_str[random_i+1:]
+            corrupt_tokens = self.alphabet.encode(corrupt_str)
+            if self.truncation_seq_length:
+                corrupt_tokens = corrupt_tokens[:self.truncation_seq_length]
+
+            corrupt_seq = torch.tensor(corrupt_tokens, dtype=torch.int64)
+            masked_tokens[i, start_idx : end_idx] = corrupt_seq
+            
             # 80% change to mask
             masked_tokens[i, start_idx : end_idx].masked_fill_(
-                    (corrupt_prob>0.2)[i, start_idx : end_idx], 
+                    mask_prob[i, start_idx : end_idx], 
                     self.alphabet.mask_idx)
             
-            masks[i, start_idx : end_idx] = 1 * (corrupt_prob > 0)[i, start_idx : end_idx]
-            
+            masks[i, start_idx : end_idx] = 1 * all_masks[i, start_idx : end_idx]
+
+            if self.alphabet.prepend_bos:
+                tokens[i, 0] = self.alphabet.cls_idx
+                masked_tokens[i, 0] = self.alphabet.cls_idx    
+        
             if self.alphabet.append_eos:
                 tokens[i, len(seq_encoded) + int(self.alphabet.prepend_bos)] = self.alphabet.eos_idx
                 masked_tokens[i, len(seq_encoded) + int(self.alphabet.prepend_bos)] = self.alphabet.eos_idx

@@ -29,7 +29,7 @@ def create_parser():
         default=2,
     )
 
-    parser.add_argument("--toks_per_batch", type=int, default=4096, help="maximum batch size")
+    parser.add_argument("--toks_per_batch", type=int, default=1024, help="maximum batch size")
     parser.add_argument(
         "--repr_layers",
         type=int,
@@ -85,7 +85,7 @@ def create_parser():
     parser.add_argument(
         "--accum_iter",
         type=int,
-        default=32,
+        default=128,
         help="accum grad to mimic large batch size",
     )
 
