@@ -9,7 +9,7 @@ def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, lo
     metric_logger = dist_misc.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', dist_misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
-    print_freq = 20
+    print_freq = 200
     accum_iter = 1 if args.accum_iter < 1 else args.accum_iter
 
     for batch_idx, (labels, strs, toks, masktoks, masks) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):

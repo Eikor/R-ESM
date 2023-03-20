@@ -8,11 +8,6 @@ def create_parser():
     )
 
     parser.add_argument(
-        "model_location",
-        type=str,
-        help="PyTorch model file OR name of pretrained model to download (see README for models)",
-    )
-    parser.add_argument(
         "fasta_file",
         type=pathlib.Path,
         help="FASTA file on which to extract representations",
@@ -26,10 +21,29 @@ def create_parser():
     parser.add_argument(
         "--coden_size",
         type=int,
-        default=2,
+        default=3,
+    )
+
+    parser.add_argument(
+        "--num_layers",
+        type=int,
+        default=12,
+    )
+
+    parser.add_argument(
+        "--embed_dim",
+        type=int,
+        default=480,
     )
 
     parser.add_argument("--toks_per_batch", type=int, default=1024, help="maximum batch size")
+    parser.add_argument(
+        "--truncation_seq_length",
+        type=int,
+        default=1022,
+        help="truncate sequences longer than the given value",
+    )
+
     parser.add_argument(
         "--repr_layers",
         type=int,
@@ -45,13 +59,6 @@ def create_parser():
         help="specify which representations to return",
         required=True,
     )
-    parser.add_argument(
-        "--truncation_seq_length",
-        type=int,
-        default=1022,
-        help="truncate sequences longer than the given value",
-    )
-
 
     ## training configs
     parser.add_argument("--nogpu", action="store_true", help="Do not use GPU even if available")
@@ -65,7 +72,7 @@ def create_parser():
     parser.add_argument(
         "--warmup_epochs",
         type=int,
-        default=40,
+        default=10,
     )
     
     parser.add_argument(
@@ -78,14 +85,14 @@ def create_parser():
     parser.add_argument(
         "--epochs",
         type=int,
-        default=500,
+        default=50,
         help='each epoch has 1k iters'
     )
 
     parser.add_argument(
         "--accum_iter",
         type=int,
-        default=128,
+        default=32,
         help="accum grad to mimic large batch size",
     )
 
@@ -115,7 +122,7 @@ def create_parser():
 
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--local_rank', default=-1, type=int)
+    parser.add_argument('--local_rank', default=0, type=int)
     parser.add_argument('--dist_on_itp', action='store_true')
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')

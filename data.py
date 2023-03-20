@@ -193,6 +193,10 @@ class RNADataset(FastaBatchedDataset):
             if cur_seq_label is None:
                 return
             sequence_strs.append("".join(buf))
+            if not sequence_strs[-1].isupper():
+                sequence_strs[-1] = sequence_strs[-1].upper()
+            if 'U' in sequence_strs[-1]:
+                sequence_strs[-1] = sequence_strs[-1].replace('U', "T")
             if 'N' in sequence_strs[-1]:
                 sequence_strs.pop()
             else:
@@ -265,7 +269,7 @@ class MaskedBatchConverter(object):
         batch_size = len(raw_batch)
         batch_labels, seq_str_list = zip(*raw_batch)
         
-        max_len = max(len(seq_str) for seq_str in seq_str_list)
+        max_len = min(max(len(seq_str) for seq_str in seq_str_list), self.truncation_seq_length)
         tokens = torch.empty(
             (
                 batch_size,
@@ -299,10 +303,15 @@ class MaskedBatchConverter(object):
         ):
             labels.append(label)
             strs.append(seq_str)
-            seq_encoded = self.alphabet.encode(seq_str)
-            if self.truncation_seq_length:
-                seq_encoded = seq_encoded[:self.truncation_seq_length]
-            
+            try:
+                seq_encoded = self.alphabet.encode(seq_str)
+            except:
+                print(seq_str)
+        
+            if len(seq_encoded) > self.truncation_seq_length: # random crop
+                crop_idx = random.randint(0, len(seq_encoded) - self.truncation_seq_length)
+                seq_encoded = seq_encoded[crop_idx:self.truncation_seq_length+crop_idx]
+                
             start_idx = int(self.alphabet.prepend_bos)
             end_idx = len(seq_encoded) + int(self.alphabet.prepend_bos)
             
@@ -315,8 +324,9 @@ class MaskedBatchConverter(object):
                 corrupt_str = corrupt_str[:random_i]+\
                     random.choice(RNAseq_toks['toks'])+corrupt_str[random_i+1:]
             corrupt_tokens = self.alphabet.encode(corrupt_str)
-            if self.truncation_seq_length:
-                corrupt_tokens = corrupt_tokens[:self.truncation_seq_length]
+            
+            if len(corrupt_tokens) > self.truncation_seq_length: # random crop
+                corrupt_tokens = corrupt_tokens[crop_idx:self.truncation_seq_length+crop_idx]
 
             corrupt_seq = torch.tensor(corrupt_tokens, dtype=torch.int64)
             masked_tokens[i, start_idx : end_idx] = corrupt_seq
@@ -335,7 +345,10 @@ class MaskedBatchConverter(object):
             if self.alphabet.append_eos:
                 tokens[i, len(seq_encoded) + int(self.alphabet.prepend_bos)] = self.alphabet.eos_idx
                 masked_tokens[i, len(seq_encoded) + int(self.alphabet.prepend_bos)] = self.alphabet.eos_idx
-
+            try:
+                torch.all(masks[tokens != masked_tokens] == 1)
+            except:
+                print('mask err.')
         return labels, strs, tokens, masked_tokens, masks
     
 class DistributedBatchSampler(DistributedSampler):

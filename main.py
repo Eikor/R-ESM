@@ -1,14 +1,13 @@
 import torch
 import torch.utils.data
-import math
-import sys
 import time
 import datetime
 import os
 import json
-os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3,4,5"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3,4,5"
 from esm import FastaBatchedDataset, pretrained
 from data import MaskedBatchConverter, DistributedBatchSampler, Alphabet_RNA, RNADataset
+from RESM import RESM
 from args import create_parser
 from criterion import MaskedPredictionLoss
 from schedular import Scheduler, LinearScheduler
@@ -33,7 +32,8 @@ def main(args):
     random.seed(seed)
 
     # prepare model
-    model, alphabet = pretrained.load_model_and_alphabet(args.model_location)
+    alphabet = Alphabet_RNA.RNA(coden_size=args.coden_size)
+    model = RESM(alphabet, num_layers=12, embed_dim=480, attention_heads=20)
     optimizer = torch.optim.AdamW(model.parameters(), betas=(0.9, 0.98), eps=10e-8, weight_decay=0.01)
     criterion = MaskedPredictionLoss()
     training_scheduler = Scheduler(model, optimizer, torch.cuda.amp.GradScaler(), LinearScheduler(args))
@@ -68,7 +68,6 @@ def main(args):
     )
     print("Sampler_train = %s" % str(sampler_train))
 
-    alphabet = Alphabet_RNA.RNA(coden_size=args.coden_size)
     data_loader_train = torch.utils.data.DataLoader(
         dataset, collate_fn=MaskedBatchConverter(alphabet, args.truncation_seq_length), num_workers=4, batch_sampler=sampler_train
     )
@@ -104,7 +103,7 @@ def main(args):
             log_writer=None,
             args=args
         )
-        if args.output_dir and (epoch % 20 == 0 or epoch + 1 == args.epochs):
+        if args.output_dir and (epoch % 10 == 0 or epoch + 1 == args.epochs):
             dist_misc.save_model(
                 args=args, model=model, model_without_ddp=model, scheduler=training_scheduler, epoch=epoch)
 
