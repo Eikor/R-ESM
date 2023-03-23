@@ -1,4 +1,4 @@
-
+import json
 import argparse
 import pathlib
 
@@ -85,7 +85,7 @@ def create_parser():
     parser.add_argument(
         "--epochs",
         type=int,
-        default=50,
+        default=100,
         help='each epoch has 1k iters'
     )
 

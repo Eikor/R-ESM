@@ -3,6 +3,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+snRNA*
+*.parquet
+*.png
+
 # C extensions
 *.so
 

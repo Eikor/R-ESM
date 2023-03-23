@@ -33,7 +33,7 @@ def main(args):
 
     # prepare model
     alphabet = Alphabet_RNA.RNA(coden_size=args.coden_size)
-    model = RESM(alphabet, num_layers=12, embed_dim=480, attention_heads=20)
+    model = RESM(alphabet, num_layers=args.num_layers, embed_dim=args.embed_dim, attention_heads=20)
     optimizer = torch.optim.AdamW(model.parameters(), betas=(0.9, 0.98), eps=10e-8, weight_decay=0.01)
     criterion = MaskedPredictionLoss()
     training_scheduler = Scheduler(model, optimizer, torch.cuda.amp.GradScaler(), LinearScheduler(args))
@@ -86,7 +86,6 @@ def main(args):
     # prepare logger
     args.output_dir.mkdir(parents=True, exist_ok=True)
     log_writer = None
-
     
     dist_misc.load_model(args=args, model_without_ddp=model, scheduler=training_scheduler)
 
