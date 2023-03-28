@@ -289,10 +289,13 @@ class MaskedBatchConverter(object):
         corrupt_prob.clamp_(min=0)
         mask_prob = corrupt_prob > 0.2 # 80% change to mask
         all_masks = corrupt_prob > 0
-
+        
+        mask_prob_ = mask_prob.clone()
+        all_masks_ = all_masks.clone()
+        
         for shift in range(self.alphabet.coden_size - 1):
-            mask_prob[:, :-shift-1] += mask_prob.roll(-shift-1)[:, :-shift-1]
-            all_masks[:, :-shift-1] += all_masks.roll(-shift-1)[:, :-shift-1]
+            mask_prob[:, :-shift-1] += mask_prob_.roll(-shift-1)[:, :-shift-1]
+            all_masks[:, :-shift-1] += all_masks_.roll(-shift-1)[:, :-shift-1]
         
         #rectify mask prob
         corrupt_prob[:, :int(self.alphabet.prepend_bos)] = 0

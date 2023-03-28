@@ -8,5 +8,5 @@ class MaskedPredictionLoss(nn.Module):
 
     def forward(self, logits, toks, masks=None):
         if masks is not None:
-            return torch.mean(self.criterion(logits, toks) * masks)
+            return torch.sum(self.criterion(logits, toks) * masks) / torch.sum(masks)
         return torch.mean(self.criterion(logits, toks))
