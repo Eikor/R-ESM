@@ -4,7 +4,7 @@ import sys
 
 import dist_misc
 
-def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, log_writer=None, args=None):
+def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, log_writer=None, args=None, finetune=False):
     model.train()
     metric_logger = dist_misc.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', dist_misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -19,9 +19,13 @@ def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, lo
             masks = masks.to(device="cuda", non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            out = model(masktoks)
-            logits = out["logits"].permute(0, 2, 1) # B*C*D
-            loss = criterion(logits, toks, masks)
+            if finetune:
+                pred = model(toks)
+                loss = criterion(labels, pred)
+            else:
+                out = model(masktoks)
+                logits = out["logits"].permute(0, 2, 1) # B*C*D
+                loss = criterion(logits, toks, masks)
 
         loss_value = loss.item()
 

@@ -255,6 +255,29 @@ class RNADataset(FastaBatchedDataset):
         _flush_current_buf()
         return batches
 
+    # def load_labels(self, labels_file):
+    #     label_count = labels_file.labels.value_counts()
+    #     valid_labels = []
+    #     for name, count in zip(label_count.index, label_count.values):
+    #         if count > min_count and name != 'NaN':
+    #             valid_labels.append(name)
+    #     label_to_idx = {label: i for i, label in enumerate(valid_labels)}
+
+
+    #     for seqid, info in tqdm(labels_file.iterrows()):
+    #         try: 
+    #             label_idx = label_to_idx[info.labels]
+    #         except: # invalid labels
+    #             label_idx = -1
+    #         try: 
+    #             dataset.loc[seqid, 'labels'] = label_idx
+    #         except: # invalid sequences
+    #             print(seqid) # never execute
+    #             pass
+
+    #     dataset = dataset.dropna() # drop invalid sequence     
+    #     return dataset, valid_labels
+
 class MaskedBatchConverter(object):
     """Callable to convert an unprocessed (labels + strings) batch to a
     processed (labels + tensor) masked batch.
