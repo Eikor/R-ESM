@@ -5,9 +5,8 @@ import time
 import datetime
 import os
 import json
-from data import MaskedBatchConverter, DistributedBatchSampler, Alphabet_RNA, RNADataset
+from data import MaskedBatchConverter, Alphabet_RNA, DistributedBatchSampler
 from RESM import RESM
-from args import create_parser
 from criterion import CLS_loss
 from schedular import Scheduler, LinearScheduler
 import dist_misc
@@ -31,13 +30,17 @@ class CLS_model(nn.Module):
     def forward(self, tokens):
         repr = self.resm(tokens, self.repr_layers)['representations'][self.repr_layers[0]]
         if self.reduce == 'mean':
-            repr = repr[:, 1:-1].mean(dim=1)
+            repr = repr.mean(dim=1)
         else:
             repr = repr[:, 0]
         return torch.softmax(self.cls_head(repr), dim=-1)
     
     def run_test(self, testset):
         self.eval()
+        testset = Seq_Dataset(testset)
+        for batch in testset:
+            self.alphabet.encode()
+
         pass
 
 class Seq_Dataset(torch.utils.data.Dataset):
@@ -51,16 +54,14 @@ class Seq_Dataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         return self.seqs.loc[index, 'labels'], self.seqs.loc[index, 'seq'][0]
 
-def finetune_cls(pretrain_url, dataset, label_names, 
-                 save_name=None, epochs=10, resume=True, repr_layers=[12], reduce='mean'):
+def finetune_cls(pretrain_url, dataset, label_names, args,
+                    save_name=None, epochs=100, warmup_epochs=10, accum_iter=128,
+                    resume=True, repr_layers=[12], reduce='cls'):
     # load training result
     model = CLS_model(pretrain_url, len(label_names), resume=resume, repr_layers=repr_layers, reduce=reduce)
-    args = model.args
-    # distribute init
-    dist_misc.init_distributed_mode(args)
-
-    print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
-    print("{}".format(args).replace(', ', ',\n'))
+    args.epochs = epochs
+    args.warmup_epochs = warmup_epochs
+    args.accum_iter=accum_iter
 
     device = torch.device(args.device)
 
@@ -80,9 +81,16 @@ def finetune_cls(pretrain_url, dataset, label_names,
         model = model.cuda()
         print("Transferred model to GPU")
 
+    num_tasks = dist_misc.get_world_size()
+    global_rank = dist_misc.get_rank()
+    batch_index = np.arange(len(dataset))[:, None].tolist()
+    sampler_train = DistributedBatchSampler(
+        Seq_Dataset(dataset), batch_index, num_replicas=num_tasks, rank=global_rank, shuffle=True
+    )
     
     data_loader_train = torch.utils.data.DataLoader(
-        Seq_Dataset(dataset), collate_fn=MaskedBatchConverter(model.alphabet, args.truncation_seq_length), num_workers=4,
+        Seq_Dataset(dataset), collate_fn=MaskedBatchConverter(model.alphabet, args.truncation_seq_length), 
+        num_workers=4, batch_sampler=sampler_train
     )
 
     print(f"Fine-tuning with {len(dataset)} sequences")
@@ -104,11 +112,11 @@ def finetune_cls(pretrain_url, dataset, label_names,
             criterion,training_scheduler,  epoch,
             log_writer=None,
             args=args,
-            finetune=True
+            finetune='cls'
         )
         if args.output_dir and (epoch % 10 == 0 or epoch + 1 == args.epochs):
             dist_misc.save_model(
-                args=args, model=model, model_without_ddp=model, scheduler=training_scheduler, epoch=epoch)
+                args=args, model=model, model_without_ddp=model, scheduler=training_scheduler, epoch='ft+'+str(epoch))
 
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                         'epoch': epoch,}
