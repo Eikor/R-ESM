@@ -14,7 +14,11 @@ Training script for ESM.
 
 RNA codens as tokens.
 
-<img src=asset/coden.png width=300 height=400 />
+A pre-trained model (35M) on snRNA dataset:
+| Scale | Coden Size | Number of layers | Embedding dim | Attention heads|
+|:----:|:----:|:----:|:----:|:----:|
+| 35M | 3 | 12 | 480 | 20 |
 
-## TODO
-- [x] build RNA dataset
+<img src=asset/intro.png width=300 height=400 />
+<img src=asset/downstream.png width=300 height=400 />
+
