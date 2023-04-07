@@ -18,9 +18,9 @@ RNA codens as tokens.
 
 
 A pre-trained model (35M) on snRNA dataset:
-| Scale | Coden Size | Number of layers | Embedding dim | Attention heads|
-|:----:|:----:|:----:|:----:|:----:|
-| 35M | 3 | 12 | 480 | 20 |
+| Scale | Coden Size | Number of layers | Embedding dim | Attention heads| Weights |
+|:----:|:----:|:----:|:----:|:----:|:----:|
+| 35M | 3 | 12 | 480 | 20 | 🤔 |
 
 Downstream tasks:
 
