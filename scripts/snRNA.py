@@ -15,6 +15,7 @@ from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.model_selection import RandomizedSearchCV
 import numpy as np
 from finetune import finetune_cls
+import dist_misc
 
 def read_labels(filename):
     fail_labels = []
@@ -162,6 +163,9 @@ if __name__ == '__main__':
     labels_file = pd.read_csv('snRNA_taxid_phylum.csv', index_col=0, header=0, names=['seqid', 'phylum_taxid', 'labels'])
     # labels_file = pd.read_csv('snRNA_Rfam_mapping.txt', sep='\t', header=0, names=['seqid', 'labels'], index_col=0)
 
+    feature_url = 'snRNA_35M_100epoch/35M_snRNA_feature_seq_phylum_cache.pd.parquet'
+    label_names = ['Chordata', 'Streptophyta', 'Arthropoda', 'Ascomycota', 'Nematoda', 'Platyhelminthes', 'Basidiomycota', 'Mollusca']
+    
     if os.path.exists(feature_url):
         dataset = pd.read_parquet(feature_url)
     else:
@@ -169,18 +173,29 @@ if __name__ == '__main__':
 
     # prepare labels         
     # pprint(labels_file.label.value_counts())
-    dataset, label_names = load_labels_to_dataset(dataset, labels_file=labels_file)
+    # dataset, label_names = load_labels_to_dataset(dataset, labels_file=labels_file)
 
     # SVM
     # run_svm(dataset, label_names, save_name=exp_name)
 
     # finetune
-    for i in dataset.iterrows():
-        dataset.loc[i[0], 'seq'] = dataset.loc[i[0], 'seq'].tolist()
+    ##  prepare dataset
     dataset = dataset.drop('seqid', axis=1).reset_index()
-    trainset = dataset.loc[dataset.labels != -1].groupby('labels').sample(500, random_state=0)
+    trainset = dataset.loc[dataset.labels != -1].groupby('labels').sample(800, random_state=0)
     testset = dataset.loc[dataset.labels != -1].drop(trainset.index)
-    finetune_cls(pretrain_url, trainset, label_names, exp_name)
+    ## finetuning args
+    pretrain_info = torch.load(pretrain_url)
+    args = pretrain_info['args'] 
+    # distribute init
+    dist_misc.init_distributed_mode(args)
+    print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
+    print("{}".format(args).replace(', ', ',\n'))
+    # finetune_cls(pretrain_url, trainset, label_names, args, save_name=exp_name,
+    #                 epochs=100, warmup_epochs=10, accum_iter=128,
+    #                 resume=True, repr_layers=[12], reduce='cls')
+    finetune_cls(pretrain_url, trainset, label_names, args, save_name=exp_name,
+                epochs=100, warmup_epochs=10, accum_iter=1280,
+                resume=False, repr_layers=[12], reduce='cls')
     
 
         
