@@ -16,8 +16,15 @@
 #     --embed_dim 480 \
 #     --coden_size 1
 
+# OMP_NUM_THREADS=1 python -m torch.distributed.launch --nproc_per_node=2 main.py \
+#     /junde/snRNA.fasta test/ \
+#     --include contacts \
+#     --num_layers 12 \
+#     --embed_dim 480 \
+#     --coden_size 1
+
 OMP_NUM_THREADS=1 python -m torch.distributed.launch --nproc_per_node=2 main.py \
-    /junde/snRNA.fasta test/ \
+    /junde/miRNA.fasta miRNA_35M_coden3_epoch100/ \
     --include contacts \
     --num_layers 12 \
     --embed_dim 480 \

@@ -6,15 +6,12 @@ from data import RNADataset, Alphabet_RNA, MaskedBatchConverter, DistributedBatc
 import pandas as pd
 from RESM import RESM
 import torch
-import seaborn as sn
-import matplotlib.pyplot as plt
 from sklearn import svm
 from sklearn.manifold import TSNE
 from sklearn.utils.fixes import loguniform
-from sklearn.metrics import confusion_matrix, classification_report
 from sklearn.model_selection import RandomizedSearchCV
 import numpy as np
-from finetune import finetune_cls
+from finetune import finetune_cls, classification_summary
 import dist_misc
 
 def read_labels(filename):
@@ -137,16 +134,7 @@ def run_svm(dataset, label_names, save_name=None):
         y_test = np.array([np.array(y) for y in y_test])
 
         predictions = best_param.predict(X_test)
-        cls_res = classification_report(y_test, predictions, target_names=label_names, digits=6)
-        print(cls_res)
-        if save_name is not None:
-            with open(save_name + '_svm.txt', 'a') as f:
-                f.write(cls_res)
-
-            cm = confusion_matrix(y_test, predictions, labels=best_param.classes_)
-            plt.figure(figsize=(10, 10))
-            ax = sn.heatmap(cm, vmax=10000, annot=True, xticklabels=label_names, yticklabels=label_names)
-            plt.savefig(save_name + f'_svm_{i}.png')
+        classification_summary(y_test, predictions, label_names, save_name+f'_svm{i}')
 
 def tsne(dataset):
     X = np.array(dataset.features.tolist())
@@ -185,18 +173,23 @@ if __name__ == '__main__':
     testset = dataset.loc[dataset.labels != -1].drop(trainset.index)
     ## finetuning args
     pretrain_info = torch.load(pretrain_url)
-    args = pretrain_info['args'] 
+    args = pretrain_info['args']
+    args.lr = 0.001 
+    args.epochs = 200
+    args.warmup_epochs = 10
+    args.accum_iter=100
     # distribute init
     dist_misc.init_distributed_mode(args)
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
     print("{}".format(args).replace(', ', ',\n'))
-    # finetune_cls(pretrain_url, trainset, label_names, args, save_name=exp_name,
-    #                 epochs=100, warmup_epochs=10, accum_iter=128,
-    #                 resume=True, repr_layers=[12], reduce='cls')
-    finetune_cls(pretrain_url, trainset, label_names, args, save_name=exp_name,
-                epochs=100, warmup_epochs=10, accum_iter=1280,
-                resume=False, repr_layers=[12], reduce='cls')
-    
+    model = finetune_cls(pretrain_url, trainset, label_names, args, save_name=exp_name+'_ft',
+                    resume=True, repr_layers=[12], reduce='cls', linear=False)
+    # model.load_state_dict(torch.load('snRNA_35M_100epoch/checkpoint-35M_snRNA_phylum_ft99.pth')['model'])
+    model.run_test(testset, save_name=exp_name+'_ft')
+
+    model = finetune_cls(pretrain_url, trainset, label_names, args, save_name=exp_name+'_scratch',
+                resume=False, repr_layers=[12], reduce='cls', linear=False)
+    model.run_test(testset, save_name=exp_name+'_scratch')
 
         
 

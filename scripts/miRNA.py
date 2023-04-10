@@ -18,13 +18,13 @@ from finetune import finetune_cls
 def extract_miRNA(fasta_name):
     fasta_name = '/junde/rnacentral_active_cleaned.fasta'
 
-    new_file = open('/junde/snRNA.fasta','a')
+    new_file = open('/junde/miRNA.fasta','a')
 
     with open(fasta_name, "r") as infile:
         for line_idx, line in tqdm(enumerate(infile)):
             if line.startswith(">"):
                 flag = False
-                if 'snRNA' in line:
+                if ' miRNA' in line:
                     new_file.write(line)
                     flag=True
                     continue
@@ -32,4 +32,4 @@ def extract_miRNA(fasta_name):
                 new_file.write(line)
 
 if __name__ == '__main__':
-    extract_miRNA()
+    extract_miRNA('/junde/rnacentral_active_cleaned.fasta')

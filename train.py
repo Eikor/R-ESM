@@ -4,7 +4,7 @@ import sys
 
 import dist_misc
 
-def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, log_writer=None, args=None, finetune='cls'):
+def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, log_writer=None, args=None, finetune=None):
     model.train()
     metric_logger = dist_misc.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', dist_misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
@@ -15,14 +15,15 @@ def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, lo
     for batch_idx, (labels, strs, toks, masktoks, masks) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         if finetune == 'cls':
             labels = torch.tensor(labels).long()
-        else:
-            labels = torch.tensor(labels)
+        # else:
+        #     labels = torch.tensor(labels)
 
         if torch.cuda.is_available() and not args.nogpu:
             toks = toks.to(device="cuda", non_blocking=True) 
             masktoks = masktoks.to(device="cuda", non_blocking=True)
             masks = masks.to(device="cuda", non_blocking=True)
-            labels = labels.to(device='cuda', non_blocking=True)
+            if finetune == 'cls':
+                labels = labels.to(device='cuda', non_blocking=True)
 
         with torch.cuda.amp.autocast():
             if finetune:
