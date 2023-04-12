@@ -18,8 +18,6 @@ from pathlib import Path
 
 import torch
 import torch.distributed as dist
-from torch._six import inf
-
 
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
