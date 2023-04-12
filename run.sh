@@ -1,6 +1,6 @@
 torchrun
-    --standalone
-    --nnodes=1
+    --standalone \
+    --nnodes=1 \
     --nproc_per_node=8 main.py \
     /dros/common/working/jdxu/rnacentral_active_cleaned.fasta 
     ncRNA_650M_coden3_epoch100/ \
