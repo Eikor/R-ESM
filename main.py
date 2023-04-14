@@ -102,7 +102,7 @@ def main(args):
             log_writer=None,
             args=args
         )
-        if args.output_dir and (epoch % 10 == 0 or epoch + 1 == args.epochs):
+        if args.output_dir and (epoch % args.save_interval == 0 or epoch + 1 == args.epochs):
             dist_misc.save_model(
                 args=args, model=model, model_without_ddp=model, scheduler=training_scheduler, epoch=epoch)
 

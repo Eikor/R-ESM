@@ -17,7 +17,11 @@ def create_parser():
         type=pathlib.Path,
         help="output directory for extracted representations",
     )
-
+    parser.add_argument(
+        "--save_interval",
+        type=int,
+        default=10,
+    )
     parser.add_argument(
         "--coden_size",
         type=int,
