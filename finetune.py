@@ -8,6 +8,7 @@ import json
 from tqdm import tqdm
 from data import MaskedBatchConverter, Alphabet_RNA, DistributedBatchSampler
 from RESM import RESM
+from esm.modules import ESM1bLayerNorm, gelu
 from criterion import CLS_loss
 from schedular import Scheduler, LinearScheduler
 import dist_misc
@@ -43,6 +44,9 @@ class CLS_model(nn.Module):
         self.reduce = reduce
         self.repr_layers = repr_layers
         self.linear = linear
+        
+        self.dense = nn.Linear(self.args.embed_dim, self.args.embed_dim)
+        self.cls_norm = ESM1bLayerNorm(self.args.embed_dim)
         self.cls_head = nn.Linear(self.args.embed_dim, len(self.label_names))
 
     def forward(self, tokens):
@@ -57,7 +61,8 @@ class CLS_model(nn.Module):
         else:
             repr = repr[:, 0]
 
-        return torch.softmax(self.cls_head(repr), dim=-1)
+        logits = self.cls_head(self.cls_norm(gelu(self.dense(repr))))
+        return torch.softmax(logits, dim=-1)
     
     def run_test(self, testset, save_name=None):
         self.eval()

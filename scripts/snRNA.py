@@ -43,12 +43,44 @@ def extract_embedding(snRNA_url, pretrain_url, repr_layers=[12], save_name=None)
     pretrain_info = torch.load(pretrain_url)
     args = pretrain_info['args']
     alphabet = Alphabet_RNA.RNA(coden_size=args.coden_size)
-    model = RESM(alphabet, num_layers=args.num_layers, embed_dim=args.embed_dim, attention_heads=20).cuda()
+    model = RESM(alphabet, num_layers=args.num_layers, embed_dim=args.embed_dim, attention_heads=args.num_heads).cuda()
     model.load_state_dict(pretrain_info['model'])
     model.eval()
     # construct data loader
     data_loader = torch.utils.data.DataLoader(
         seq_data, collate_fn=MaskedBatchConverter(alphabet=alphabet, truncation_seq_length=99999), num_workers=16)
+
+    labels = []
+    features = []
+    seqid = []
+    seqs = []
+    for batch in tqdm(data_loader):
+        (label, strs, toks, masktoks, masks) = batch
+        
+        # if label[0].split()[0] != 'URS0000E7F388':
+        #     continue
+        seqid.append(label[0].split()[0])
+        labels.append(-1)
+        seqs.append(strs)
+        toks = toks.to(device="cuda", non_blocking=True) 
+        with torch.no_grad():
+            out = model(toks, repr_layers=repr_layers)
+        features.append(out["representations"][repr_layers[-1]][0].mean(0))
+
+    features = [feature.tolist() for feature in features]
+    seqs = [seq.tolist() for seq in seqs]
+    dataset = pd.DataFrame(list(zip(seqid, seqs,features, labels)), columns=['seqid', 'seq', 'features', 'labels'])
+
+    if save_name is not None:
+        dataset.to_parquet(save_name)
+    return dataset
+
+def extract_labels(snRNA_url, pretrain_url, repr_layers=[12], save_name=None):
+    seq_data = RNADataset.from_file(snRNA_url)  
+    # load training result
+    pretrain_info = torch.load(pretrain_url)
+    args = pretrain_info['args']
+    alphabet = Alphabet_RNA.RNA(coden_size=args.coden_size)
 
     labels = []
     features = []
@@ -147,7 +179,7 @@ if __name__ == '__main__':
     snRNA_url = '/junde/snRNA.fasta'
     pretrain_url = 'snRNA_35M_100epoch/checkpoint-99.pth'
     feature_url = 'snRNA_35M_100epoch/35M_snRNA_feature_seq_cache.pd.parquet'
-    exp_name = 'snRNA_35M_100epoch/35M_snRNA_phylum'
+    exp_name = 'snRNA_phylum'
     labels_file = pd.read_csv('snRNA_taxid_phylum.csv', index_col=0, header=0, names=['seqid', 'phylum_taxid', 'labels'])
     # labels_file = pd.read_csv('snRNA_Rfam_mapping.txt', sep='\t', header=0, names=['seqid', 'labels'], index_col=0)
 
@@ -169,21 +201,22 @@ if __name__ == '__main__':
     # finetune
     ##  prepare dataset
     dataset = dataset.drop('seqid', axis=1).reset_index()
-    trainset = dataset.loc[dataset.labels != -1].groupby('labels').sample(800, random_state=0)
+    trainset = dataset.loc[dataset.labels != -1].groupby('labels').sample(1000, random_state=0)
     testset = dataset.loc[dataset.labels != -1].drop(trainset.index)
     ## finetuning args
     pretrain_info = torch.load(pretrain_url)
     args = pretrain_info['args']
-    args.lr = 0.001 
-    args.epochs = 200
-    args.warmup_epochs = 10
-    args.accum_iter=100
+    args.lr = 0.00004 
+    args.min_lr = 1e-6
+    args.epochs = 100
+    args.warmup_epochs = 20
+    args.accum_iter=16
     # distribute init
     dist_misc.init_distributed_mode(args)
     print('job dir: {}'.format(os.path.dirname(os.path.realpath(__file__))))
     print("{}".format(args).replace(', ', ',\n'))
     model = finetune_cls(pretrain_url, trainset, label_names, args, save_name=exp_name+'_ft',
-                    resume=True, repr_layers=[12], reduce='cls', linear=False)
+                    resume=True, repr_layers=[12], reduce='mean', linear=False)
     # model.load_state_dict(torch.load('snRNA_35M_100epoch/checkpoint-35M_snRNA_phylum_ft99.pth')['model'])
     model.run_test(testset, save_name=exp_name+'_ft')
 

@@ -31,6 +31,12 @@ def create_parser():
     )
 
     parser.add_argument(
+        "--num_heads",
+        type=int,
+        default=20,
+    )
+
+    parser.add_argument(
         "--embed_dim",
         type=int,
         default=480,

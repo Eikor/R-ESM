@@ -33,7 +33,7 @@ def main(args):
 
     # prepare model
     alphabet = Alphabet_RNA.RNA(coden_size=args.coden_size)
-    model = RESM(alphabet, num_layers=args.num_layers, embed_dim=args.embed_dim, attention_heads=20)
+    model = RESM(alphabet, num_layers=args.num_layers, embed_dim=args.embed_dim, attention_heads=args.num_heads)
     optimizer = torch.optim.AdamW(model.parameters(), betas=(0.9, 0.98), eps=10e-8, weight_decay=0.01)
     criterion = MaskedPredictionLoss()
     training_scheduler = Scheduler(model, optimizer, torch.cuda.amp.GradScaler(), LinearScheduler(args))
@@ -49,7 +49,7 @@ def main(args):
     # prepare dataset
     dataset = RNADataset.from_file(args.fasta_file)
     ### change to dist sampler ###
-    batch_index = dataset.get_batch_indices(args.toks_per_batch, extra_toks_per_seq=1)
+    batch_index = dataset.get_batch_indices(args.toks_per_batch, extra_toks_per_seq=2)
 
     # ####
     # counter = []

@@ -41,11 +41,11 @@ def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, lo
             sys.exit(1)
 
         loss /= accum_iter
+        training_scheduler.loss_scale_and_backward(loss)
         
         if (batch_idx + 1) % accum_iter == 0:
-            training_scheduler.zero_grad()
-            training_scheduler.loss_scale_and_backward(loss)
             training_scheduler.step_and_lr_schedule(batch_idx / len(data_loader) + epoch)
+            training_scheduler.zero_grad()
 
         torch.cuda.synchronize()
 
