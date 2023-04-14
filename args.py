@@ -108,14 +108,14 @@ def create_parser():
 
     parser.add_argument(
         "--lr",
-        type=int,
+        type=float,
         default=1e-3,
         help="accum grad to mimic large batch size",
     )
     
     parser.add_argument(
         "--min_lr",
-        type=int,
+        type=float,
         default=1e-6,
         help="accum grad to mimic large batch size",
     )
