@@ -71,10 +71,8 @@ def main(args):
     model_without_ddp = model
     optimizer = torch.optim.AdamW(model.parameters(), betas=(0.9, 0.98), eps=10e-8, weight_decay=0.01)
     criterion = MaskedPredictionLoss()
-        training_scheduler = Scheduler_fsdp(model, optimizer, LinearScheduler(args))
     training_scheduler = Scheduler(model, optimizer, torch.cuda.amp.GradScaler(), LinearScheduler(args))
     
-
     if torch.cuda.is_available() and not args.nogpu and not args.fsdp:
         model = model.to(device)
         print("Transferred model to GPU")
