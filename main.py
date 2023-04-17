@@ -23,7 +23,7 @@ from data import MaskedBatchConverter, DistributedBatchSampler, Alphabet_RNA, RN
 from RESM import RESM, TransformerLayer
 from args import create_parser
 from criterion import MaskedPredictionLoss
-from schedular import Scheduler, Scheduler1, LinearScheduler
+from schedular import Scheduler, Scheduler_fsdp, LinearScheduler
 import dist_misc
 from train import train_one_epoch
 import numpy as np
@@ -71,8 +71,10 @@ def main(args):
     model_without_ddp = model
     optimizer = torch.optim.AdamW(model.parameters(), betas=(0.9, 0.98), eps=10e-8, weight_decay=0.01)
     criterion = MaskedPredictionLoss()
-    # training_scheduler = Scheduler(model, optimizer, torch.cuda.amp.GradScaler(), LinearScheduler(args))
-    training_scheduler = Scheduler1(model, optimizer, LinearScheduler(args))
+    if args.fsdp:
+        training_scheduler = Scheduler_fsdp(model, optimizer, LinearScheduler(args))
+    else:
+        training_scheduler = Scheduler(model, optimizer, torch.cuda.amp.GradScaler(), LinearScheduler(args))
     
 
     if torch.cuda.is_available() and not args.nogpu and not args.fsdp:

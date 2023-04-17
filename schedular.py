@@ -33,7 +33,7 @@ class Scheduler:
         lr = self.scheduler.lr_schedule(self.optim, epoch)
         return lr
 
-class Scheduler1:
+class Scheduler_fsdp:
     def __init__(self, model, optim, lr_scheduler) -> None:
         self.model = model
         self.optim = optim
