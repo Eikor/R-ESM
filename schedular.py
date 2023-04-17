@@ -33,6 +33,33 @@ class Scheduler:
         lr = self.scheduler.lr_schedule(self.optim, epoch)
         return lr
 
+class Scheduler1:
+    def __init__(self, model, optim, lr_scheduler) -> None:
+        self.model = model
+        self.optim = optim
+        self.scheduler = lr_scheduler
+
+    def zero_grad(self):
+        self.optim.zero_grad()
+
+    def loss_scale_and_backward(self, loss:torch.Tensor, create_graph=False):
+        loss.backward(create_graph=create_graph)
+
+    def step_and_lr_schedule(self, epoch, clip_grad=None, update_grad=True):
+        if update_grad:
+            # if clip_grad is not None:
+            #     self.scaler.unscale_(self.optim)  # unscale the gradients of optimizer's assigned params in-place
+            #     norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), clip_grad)
+            # else:
+            #     self.scaler.unscale_(self.optim)
+            #     norm = get_grad_norm_(self.model.parameters())
+            self.optim.step()
+            # self.optim.update()
+        else:
+            norm = None
+        lr = self.scheduler.lr_schedule(self.optim, epoch)
+        return lr
+    
 def get_grad_norm_(parameters, norm_type: float = 2.0) -> torch.Tensor:
     if isinstance(parameters, torch.Tensor):
         parameters = [parameters]

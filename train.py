@@ -25,14 +25,14 @@ def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, de
             if finetune == 'cls':
                 labels = labels.to(device='cuda', non_blocking=True)
 
-        with torch.cuda.amp.autocast():
-            if finetune:
-                pred = model(toks)
-                loss = criterion(pred, labels)
-            else:
-                out = model(masktoks)
-                logits = out["logits"].permute(0, 2, 1) # B*C*D
-                loss = criterion(logits, toks, masks)
+        # with torch.cuda.amp.autocast():
+        if finetune:
+            pred = model(toks)
+            loss = criterion(pred, labels)
+        else:
+            out = model(masktoks)
+            logits = out["logits"].permute(0, 2, 1) # B*C*D
+            loss = criterion(logits, toks, masks)
 
         loss_value = loss.item()
 
