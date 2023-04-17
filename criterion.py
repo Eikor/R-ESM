@@ -8,7 +8,11 @@ class MaskedPredictionLoss(nn.Module):
 
     def forward(self, logits, toks, masks=None):
         if masks is not None:
-            return torch.sum(self.criterion(logits, toks) * masks) / torch.sum(masks)
+            if torch.sum(masks) == 0:
+                coeff = 1
+            else:
+                coeff = torch.sum(masks)
+            return torch.sum(self.criterion(logits, toks) * masks) / coeff
         return torch.mean(self.criterion(logits, toks))
     
 class CLS_loss(nn.Module):
