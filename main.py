@@ -5,7 +5,8 @@ import datetime
 import os
 import json
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3,4,5"
-from esm import FastaBatchedDataset, pretrained
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from data import MaskedBatchConverter, DistributedBatchSampler, Alphabet_RNA, RNADataset
 from RESM import RESM
 from args import create_parser
@@ -34,6 +35,7 @@ def main(args):
     # prepare model
     alphabet = Alphabet_RNA.RNA(coden_size=args.coden_size)
     model = RESM(alphabet, num_layers=args.num_layers, embed_dim=args.embed_dim, attention_heads=args.num_heads)
+    model_without_ddp = model
     optimizer = torch.optim.AdamW(model.parameters(), betas=(0.9, 0.98), eps=10e-8, weight_decay=0.01)
     criterion = MaskedPredictionLoss()
     training_scheduler = Scheduler(model, optimizer, torch.cuda.amp.GradScaler(), LinearScheduler(args))
@@ -87,7 +89,12 @@ def main(args):
     args.output_dir.mkdir(parents=True, exist_ok=True)
     log_writer = None
     
-    dist_misc.load_model(args=args, model_without_ddp=model, scheduler=training_scheduler)
+    if args.distributed:
+        # model = DDP(model, device_ids=[args.gpu], find_unused_parameters=True)
+        model = FSDP(model)
+        model_without_ddp = model.module
+    
+    dist_misc.load_model(args=args, model_without_ddp=model_without_ddp, scheduler=training_scheduler)
 
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
@@ -98,7 +105,7 @@ def main(args):
 
         train_stats = train_one_epoch(
             model, data_loader_train,
-            criterion,training_scheduler,  epoch,
+            criterion,training_scheduler, epoch, device,
             log_writer=None,
             args=args
         )

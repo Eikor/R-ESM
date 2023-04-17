@@ -4,7 +4,7 @@ import sys
 
 import dist_misc
 
-def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, log_writer=None, args=None, finetune=None):
+def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, device, log_writer=None, args=None, finetune=None):
     model.train()
     metric_logger = dist_misc.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', dist_misc.SmoothedValue(window_size=1, fmt='{value:.6f}'))
