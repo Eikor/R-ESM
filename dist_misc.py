@@ -273,7 +273,7 @@ def save_model(args, epoch, model, model_without_ddp, scheduler):
             }
             save_on_master(to_save, checkpoint_path)
         
-    if scheduler.scaler is not None:
+    elif scheduler.scaler is not None:
         checkpoint_paths = [output_dir / ('checkpoint-%s.pth' % epoch_name)]
         for checkpoint_path in checkpoint_paths:
             to_save = {

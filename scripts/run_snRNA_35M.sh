@@ -10,11 +10,11 @@ torchrun \
     --num_heads 20 \
     --embed_dim 480 \
     --coden_size 3 \
-    --warmup_epochs 1 \
-    --epochs 15 \
+    --warmup_epochs 10 \
+    --epochs 100 \
     --lr 1e-3 \
     --min_lr 1e-5 \
-    --accum_iter 384 \
+    --accum_iter 32 \
     --toks_per_batch 1024 \
     --truncation_seq_length 1024 \
     --fsdp \
