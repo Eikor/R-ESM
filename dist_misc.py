@@ -19,6 +19,12 @@ from pathlib import Path
 import torch
 import torch.distributed as dist
 
+from torch.distributed.fsdp import (
+    FullyShardedDataParallel as FSDP,
+    FullStateDictConfig,
+    StateDictType,
+)
+
 class SmoothedValue(object):
     """Track a series of values and provide access to smoothed values over a
     window or the global series average.
@@ -251,6 +257,22 @@ def init_distributed_mode(args):
 def save_model(args, epoch, model, model_without_ddp, scheduler):
     output_dir = Path(args.output_dir)
     epoch_name = str(epoch)
+    if args.fsdp:
+        checkpoint_paths = [output_dir / ('checkpoint-%s.pth' % epoch_name)]
+        save_policy = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        with FSDP.state_dict_type(
+            model, StateDictType.FULL_STATE_DICT, save_policy
+        ):
+            cpu_state = model.state_dict()
+        for checkpoint_path in checkpoint_paths:
+            to_save = {
+                'model': cpu_state,
+                'optimizer': scheduler.optim.state_dict(),
+                'epoch': epoch,
+                'args': args,
+            }
+            save_on_master(to_save, checkpoint_path)
+        
     if scheduler.scaler is not None:
         checkpoint_paths = [output_dir / ('checkpoint-%s.pth' % epoch_name)]
         for checkpoint_path in checkpoint_paths:

@@ -6,9 +6,21 @@ import os
 import json
 # os.environ["CUDA_VISIBLE_DEVICES"] = "1,2,3,4,5"
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+
+import functools
+from torch.distributed.fsdp import (
+    FullyShardedDataParallel as FSDP,
+    MixedPrecision,
+    ShardingStrategy,
+)
+from torch.distributed.fsdp.wrap import (
+    transformer_auto_wrap_policy,
+    enable_wrap,
+    wrap,
+)
+
 from data import MaskedBatchConverter, DistributedBatchSampler, Alphabet_RNA, RNADataset
-from RESM import RESM
+from RESM import RESM, TransformerLayer
 from args import create_parser
 from criterion import MaskedPredictionLoss
 from schedular import Scheduler, Scheduler1, LinearScheduler
@@ -16,6 +28,28 @@ import dist_misc
 from train import train_one_epoch
 import numpy as np
 import random
+
+fpSixteen = MixedPrecision(
+    param_dtype=torch.float16,
+    # Gradient communication precision.
+    reduce_dtype=torch.float16,
+    # Buffer precision.
+    buffer_dtype=torch.float16,
+)
+
+bfSixteen = MixedPrecision(
+    param_dtype=torch.bfloat16,
+    # Gradient communication precision.
+    reduce_dtype=torch.bfloat16,
+    # Buffer precision.
+    buffer_dtype=torch.bfloat16,
+)
+
+fp32_policy = MixedPrecision(
+    param_dtype=torch.float32,
+    reduce_dtype=torch.float32,
+    buffer_dtype=torch.float32,
+)
 
 def main(args):
     # distribute init
@@ -25,7 +59,6 @@ def main(args):
     print("{}".format(args).replace(', ', ',\n'))
 
     device = torch.device(args.device)
-
     # fix the seed for reproducibility
     seed = args.seed + dist_misc.get_rank()
     torch.manual_seed(seed)
@@ -41,12 +74,9 @@ def main(args):
     # training_scheduler = Scheduler(model, optimizer, torch.cuda.amp.GradScaler(), LinearScheduler(args))
     training_scheduler = Scheduler1(model, optimizer, LinearScheduler(args))
     
-    return_contacts = "contacts" in args.include
-    assert all(-(model.num_layers + 1) <= i <= model.num_layers for i in args.repr_layers)
-    repr_layers = [(i + model.num_layers + 1) % (model.num_layers + 1) for i in args.repr_layers]
 
-    if torch.cuda.is_available() and not args.nogpu:
-        model = model.cuda()
+    if torch.cuda.is_available() and not args.nogpu and not args.fsdp:
+        model = model.to(device)
         print("Transferred model to GPU")
 
     # prepare dataset
@@ -54,16 +84,7 @@ def main(args):
     ### change to dist sampler ###
     batch_index = dataset.get_batch_indices(args.toks_per_batch, extra_toks_per_seq=2)
 
-    # ####
-    # counter = []
-    # RNAseg_toks = set('ATCGU')
-    # ambigues = []
-    # for item in dataset:
-    #     counter.append(len(item[1]))
-    #     if not set(item[1]) - RNAseg_toks:
-    #         ambigues.append(item[0]) 
-    # ####
-    
+
     num_tasks = dist_misc.get_world_size()
     global_rank = dist_misc.get_rank()
     sampler_train = DistributedBatchSampler(
@@ -74,15 +95,6 @@ def main(args):
     data_loader_train = torch.utils.data.DataLoader(
         dataset, collate_fn=MaskedBatchConverter(alphabet, args.truncation_seq_length), num_workers=4, batch_sampler=sampler_train
     )
-    ####
-    # counter1 = 0
-    # counter2 = 0
-    # for item in dataset:
-    #     if 'N' in item[1]:
-    #         counter1 += 1
-    #         counter2 += item[1].count('N')
-
-    ####
 
     print(f"Read {args.fasta_file} with {len(dataset)} sequences")
 
@@ -90,13 +102,33 @@ def main(args):
     args.output_dir.mkdir(parents=True, exist_ok=True)
     log_writer = None
     
-    if args.distributed:
-        # model = DDP(model, device_ids=[args.gpu], find_unused_parameters=True)
-        model = FSDP(model)
+    if args.distributed and not args.fsdp:
+        model = DDP(model, device_ids=[args.gpu], find_unused_parameters=True)
         model_without_ddp = model.module
-    
+
     dist_misc.load_model(args=args, model_without_ddp=model_without_ddp, scheduler=training_scheduler)
 
+    if args.fsdp:
+        RESM_auto_wrap_policy = functools.partial(
+            transformer_auto_wrap_policy,
+            transformer_layer_cls={
+                TransformerLayer,
+            },
+        )
+        
+        sharding_strategy: ShardingStrategy = ShardingStrategy.SHARD_GRAD_OP if args.sharding == 'ZERO2' else ShardingStrategy.FULL_SHARD
+        
+        if args.bf16:
+            mp_policy = bfSixteen
+        else:
+            mp_policy = None # defaults to fp32
+        
+        model = FSDP(model,
+            auto_wrap_policy=RESM_auto_wrap_policy,
+            mixed_precision=mp_policy,
+            sharding_strategy=sharding_strategy,
+            device_id=torch.cuda.current_device())
+    
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
@@ -123,6 +155,8 @@ def main(args):
             with open(os.path.join(args.output_dir, "log.txt"), mode="a", encoding="utf-8") as f:
                 f.write(json.dumps(log_stats) + "\n")
 
+    torch.distributed.barrier()
+    torch.distributed.destroy_process_group()
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))

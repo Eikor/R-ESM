@@ -136,4 +136,15 @@ def create_parser():
     parser.add_argument('--dist_on_itp', action='store_true')
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
+    parser.add_argument('--fsdp', action='store_true')
+    parser.add_argument('--bf16', action='store_true')
+    parser.add_argument(
+        "--sharding",
+        type=str,
+        nargs="+",
+        choices=["ZERO2", "ZERO3"],
+        help="sharding strategy",
+        default="ZERO3"
+    )
+
     return parser

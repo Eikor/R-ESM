@@ -55,4 +55,6 @@ torchrun \
     --min_lr 1e-5 \
     --accum_iter 384 \
     --toks_per_batch 2052 \
-    --truncation_seq_length 1024
+    --truncation_seq_length 1024 \
+    --fsdp \
+    --bf16
