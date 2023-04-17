@@ -283,8 +283,9 @@ class MaskedBatchConverter(object):
     processed (labels + tensor) masked batch.
     """
 
-    def __init__(self, alphabet, truncation_seq_length: int = None):
+    def __init__(self, alphabet, truncation_seq_length: int = None, static_batch=False):
         self.alphabet = alphabet
+        self.static_batch = static_batch
         self.truncation_seq_length = truncation_seq_length
 
     def __call__(self, raw_batch: Sequence[Tuple[str, str]]):
@@ -292,7 +293,10 @@ class MaskedBatchConverter(object):
         batch_size = len(raw_batch)
         batch_labels, seq_str_list = zip(*raw_batch)
         
-        max_len = min(max(len(seq_str) for seq_str in seq_str_list), self.truncation_seq_length)
+        if self.static_batch:
+            max_len = self.truncation_seq_length
+        else:
+            max_len = min(max(len(seq_str) for seq_str in seq_str_list), self.truncation_seq_length)
         tokens = torch.empty(
             (
                 batch_size,

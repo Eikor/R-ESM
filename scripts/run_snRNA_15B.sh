@@ -14,8 +14,9 @@ torchrun \
     --epochs 100 \
     --lr 1e-3 \
     --min_lr 1e-5 \
-    --accum_iter 32 \
+    --accum_iter 4 \
     --toks_per_batch 1024 \
     --truncation_seq_length 1024 \
     --fsdp \
-    --bf16
+    --bf16 \
+    --static_batch

@@ -80,8 +80,10 @@ def main(args):
     # prepare dataset
     dataset = RNADataset.from_file(args.fasta_file)
     ### change to dist sampler ###
-    batch_index = dataset.get_batch_indices(args.toks_per_batch, extra_toks_per_seq=2)
-
+    if not args.static_batch:
+        batch_index = dataset.get_batch_indices(args.toks_per_batch, extra_toks_per_seq=2)
+    else:
+        batch_index = np.arange(len(dataset))[:, None].tolist()
 
     num_tasks = dist_misc.get_world_size()
     global_rank = dist_misc.get_rank()
@@ -91,7 +93,7 @@ def main(args):
     print("Sampler_train = %s" % str(sampler_train))
 
     data_loader_train = torch.utils.data.DataLoader(
-        dataset, collate_fn=MaskedBatchConverter(alphabet, args.truncation_seq_length), num_workers=4, batch_sampler=sampler_train
+        dataset, collate_fn=MaskedBatchConverter(alphabet, args.truncation_seq_length, args.static_batch), num_workers=4, batch_sampler=sampler_train
     )
 
     print(f"Read {args.fasta_file} with {len(dataset)} sequences")

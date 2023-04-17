@@ -138,6 +138,7 @@ def create_parser():
                         help='url used to set up distributed training')
     parser.add_argument('--fsdp', action='store_true')
     parser.add_argument('--bf16', action='store_true')
+    parser.add_argument('--static_batch', action='store_true')
     parser.add_argument(
         "--sharding",
         type=str,
