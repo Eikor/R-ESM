@@ -42,7 +42,7 @@ torchrun \
     --nnodes=1 \
     --nproc_per_node=8 main.py \
     /dros/common/working/jdxu/snRNA.fasta \
-    ncRNA_650M_coden3_epoch15/ \
+    snRNA_650M_coden3_epoch15/ \
     --include contacts \
     --save_interval 1 \
     --num_layers 33 \
