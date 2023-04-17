@@ -19,20 +19,20 @@ def train_one_epoch(model, data_loader, criterion, training_scheduler, epoch, de
         #     labels = torch.tensor(labels)
 
         if torch.cuda.is_available() and not args.nogpu:
-            toks = toks.to(device="cuda", non_blocking=True) 
-            masktoks = masktoks.to(device="cuda", non_blocking=True)
-            masks = masks.to(device="cuda", non_blocking=True)
+            toks = toks.to(device=device, non_blocking=True) 
+            masktoks = masktoks.to(device=device, non_blocking=True)
+            masks = masks.to(device=device, non_blocking=True)
             if finetune == 'cls':
-                labels = labels.to(device='cuda', non_blocking=True)
+                labels = labels.to(device=device, non_blocking=True)
 
-        # with torch.cuda.amp.autocast():
-        if finetune:
-            pred = model(toks)
-            loss = criterion(pred, labels)
-        else:
-            out = model(masktoks)
-            logits = out["logits"].permute(0, 2, 1) # B*C*D
-            loss = criterion(logits, toks, masks)
+        with torch.cuda.amp.autocast():
+            if finetune:
+                pred = model(toks)
+                loss = criterion(pred, labels)
+            else:
+                out = model(masktoks)
+                logits = out["logits"].permute(0, 2, 1) # B*C*D
+                loss = criterion(logits, toks, masks)
 
         loss_value = loss.item()
 

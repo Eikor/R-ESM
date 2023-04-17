@@ -130,6 +130,8 @@ def main(args):
             mixed_precision=mp_policy,
             sharding_strategy=sharding_strategy,
             device_id=torch.cuda.current_device())
+        if dist_misc.is_main_process():
+            print(model)
     
     print(f"Start training for {args.epochs} epochs")
     start_time = time.time()
