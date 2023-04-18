@@ -300,7 +300,7 @@ def load_model(args, model_without_ddp, scheduler):
         model_without_ddp.load_state_dict(checkpoint['model'])
         print("Resume checkpoint %s" % args.resume)
         if 'optimizer' in checkpoint and 'epoch' in checkpoint and not (hasattr(args, 'eval') and args.eval):
-            scheduler.optimizer.load_state_dict(checkpoint['optimizer'])
+            scheduler.optim.load_state_dict(checkpoint['optimizer'])
             args.start_epoch = checkpoint['epoch'] + 1
             if 'scaler' in checkpoint:
                 scheduler.scaler.load_state_dict(checkpoint['scaler'])
